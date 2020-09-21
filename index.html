@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.15.1/dist/phaser-arcade-physics.min.js"></script>
+    <meta charset="UTF-8">
+</head>
+<body>
+<script>
+
+   CHECKPOINT = 0;  //0=inicio, 1=chapeu, 2=plataforma
+   checks = {};
+	const config = {
+		type: Phaser.AUTO, 
+		width: 800, 
+		height: 600,
+
+		parent: "game-container",
+		pixelArt: true,
+
+		physics: {
+			default: 'arcade',
+			arcade: {
+				gravity: {
+					y: 0			
+				},
+				debug: false
+			}
+		},
+
+		scene: {
+			preload: preload,
+			create: create,
+			update: update
+		},
+		
+		audio: {
+			disableWebAudio: true
+		}
+	};
+
+	var game = new Phaser.Game(config);
+
+
+	function preload() {
+		this.load.image("tiles", "mapa/s4m_ur4i-metroidvania-1.3-high-contrast.png");
+		this.load.spritesheet("alltiles", "mapa/s4m_ur4i-metroidvania-1.3-high-contrast.png", {
+			frameWidth: 16,
+			frameHeight: 16
+		});
+		this.load.tilemapTiledJSON("map", "mapa/mapa.json");
+		this.load.image("hat", "assets/hat.png");
+		this.load.image("tutorial", "assets/tutorial.png")
+		
+		
+		//load do personagem
+		this.load.spritesheet('dude', 'assets/dude.png', {
+			frameWidth: 32,
+			frameHeight: 38
+		});
+		
+		this.load.spritesheet('slime', 'assets/slime.png', {
+			frameWidth: 32,
+			frameHeight: 32
+		});
+		
+		this.load.audio('fundo', 'assets/music.wav')
+		this.load.audio('pulo', 'assets/jump.wav')
+		this.load.audio('morte', 'assets/death.mp3')
+		this.load.audio('pop', 'assets/pop.wav')
+		this.load.audio('win', 'assets/win.wav')
+
+	}
+
+	function create() {
+		
+		musicaFundo = this.sound.add('fundo')
+		somPulo = this.sound.add('pulo')
+		somMorte = this.sound.add('morte')
+		somMorteSlime = this.sound.add('pop')
+		somVitoria = this.sound.add('win')
+		
+		musicaFundo.play({loop: true})
+		
+		//criar mapa
+		const map = this.make.tilemap({
+			key: "map"
+		});
+
+		//definicao do tileset
+		const tileset = map.addTilesetImage("s4m_ur4i-metroidvania-1.3-high-contrast", "tiles");
+
+		//camadas do mapa
+		const background = map.createStaticLayer("background", tileset, 0, 0);
+		const tilesbackground = map.createStaticLayer("tilesbackground", tileset, 0, 0);
+		const collision = map.createStaticLayer("collision", tileset, 0, 0);
+		
+		//definir colisao por propriedade collides do tiled
+		collision.setCollisionByProperty({
+		collides: true
+		});
+
+		//Criando grupos
+		lava = this.physics.add.group();
+		spike = this.physics.add.group();
+		spike2 = this.physics.add.group();
+		slime = this.physics.add.group();
+		slime2 = this.physics.add.group();
+		fire = this.physics.add.group();
+      checkpoints = this.physics.add.group();
+		//Carregando objetos
+		camadaDeObjetos = map.getObjectLayer('objetos')['objects'];
+		camadaDeObjetos.forEach(obj => {
+			//console.log(obj);
+			
+			
+			//fogo
+			if (obj.name == "fire") {
+				f = fire.create(obj.x+8, obj.y-8, 'alltiles', obj.gid - 1)	
+				f.setSize(5,5)
+				f.setOffset(8,8)
+				f.body.setGravityY(400)
+				f.depth = 0
+				this.physics.add.collider(f, collision);
+				
+			}
+		
+			//lava
+			if (obj.name == "Lava") {
+				l = lava.create(obj.x+8, obj.y-8, 'alltiles', obj.gid - 1)
+				this.physics.add.collider(l, collision);
+				l.scaleY=.5
+				l.body.setGravityY(400)
+				l.setOffset(0,-5)
+				this.children.bringToTop(l);
+			}
+			
+			//espinho do chão
+			if (obj.name == "spike") {
+				s = spike.create(obj.x+8, obj.y-8, 'alltiles', obj.gid - 1)
+				s.toggleFlipY()	
+				s.setSize(5,3)
+				this.physics.add.collider(s, collision);		
+			}
+			
+			//espinho do teto
+			if (obj.name == "spike2") {
+				s = spike.create(obj.x+8, obj.y-8, 'alltiles', obj.gid - 1)	
+				s.setSize(5,5)
+				this.physics.add.collider(s, collision);
+			}
+			
+			
+			
+			
+			//checkpoint
+			if (obj.name == "checkpoint") {
+				checkpoint = checkpoints.create(obj.x+8, obj.y-8, 'alltiles', obj.gid - 1);
+				checkpoint.scaleY=.1
+            checks[obj.properties[0].value] = checkpoint;
+            
+            
+            checkpoint.numero = obj.properties[0].value;
+				checkpoint.body.setGravityY(400)
+				this.physics.add.collider(checkpoint, collision);
+			}
+			
+	
+			
+			
+			//slime
+			if (obj.name == "slime") {
+				s = slime.create(obj.x+8, obj.y-16, 'slime', 59)	
+				
+				
+				s.body.setGravityY(400)
+				
+				s.setSize(7,10)
+				s.setOffset(12,22)
+				
+				
+				this.anims.create({
+					key: 'slimeanim',
+					frames: this.anims.generateFrameNumbers('slime', {
+						start: 50,
+						end: 52
+					}),
+					frameRate: 6,
+					repeat: -1
+				});
+				
+						
+				s.anims.play('slimeanim', true);
+				
+				
+				
+				this.physics.add.collider(s, collision);
+			}
+			
+			if (obj.name == "slimeGigante") {
+				slimeGigante = slime.create(obj.x+8, obj.y-16, 'slime', 59)	
+				
+				
+				slimeGigante.body.setGravityY(400)
+				slimeGigante.setScale(5)
+				slimeGigante.setSize(7,10)
+				slimeGigante.setOffset(12,22)
+						
+				slimeGigante.anims.play('slimeanim', true);
+				
+				
+				
+				this.physics.add.collider(slimeGigante, collision);
+			}
+			
+			//slime2
+			if (obj.name == "slime2") {
+				s = slime2.create(obj.x+8, obj.y-16, 'slime', 59)	
+				
+				
+				s.body.setGravityY(400)
+				
+				s.setSize(7,10)
+				s.setOffset(12,22)
+				
+				
+				this.anims.create({
+					key: 'slimeanim2',
+					frames: this.anims.generateFrameNumbers('slime', {
+						start: 30,
+						end: 32
+					}),
+					frameRate: 6,
+					repeat: -1
+				});
+				
+				
+						
+				s.anims.play('slimeanim2', true);
+				
+				
+				
+				this.physics.add.collider(s, collision);
+			}
+			
+			
+			
+			
+			//fazer o fogo ficar atrás da lava
+			fire.setDepth(1)
+			lava.setDepth(2)
+			
+			
+			//player
+			if (obj.name == "Player") {
+				//criar player
+				player = this.physics.add.sprite(obj.x, obj.y-15, 'dude');
+				player.body.setGravityY(400)
+				player.setScale(.7)
+				player.setSize(26, 37)
+				this.physics.add.collider(player, map);
+				this.physics.add.collider(player, collision);
+				player.vida = 3;
+				hatFollow = false;		
+				player.setOffset(1, 1﻿)﻿
+				//colidir player com a borda do mundo:
+				//player.setCollideWorldBounds(true);		
+			}
+			
+			//chapéu
+			if (obj.name == "hat") {
+				hat = this.physics.add.sprite(obj.x, obj.y-30, "hat")
+				hat.body.setGravityY(0)			
+				hat.setSize(18, 14)			
+				hat.setOffset(3, 0)			
+				this.physics.add.collider(hat, collision);		
+				this.physics.add.collider(hat, player);		
+				hat.setScale(.8)
+			}
+			
+			//fim do jogo
+			if (obj.name == "final") {
+				varfinal = this.physics.add.sprite(obj.x, obj.y-30)   	
+				
+				varfinal.setScale(2)
+				this.physics.add.collider(varfinal, collision);
+			}
+			
+		});
+
+      if (CHECKPOINT == 1) {
+         //teleportar player pro checkpoint do chapéu
+         player.x = checks[1].x
+         player.y = checks[1].y-10
+      }
+      if (CHECKPOINT == 2) {
+         //teleportar player pro checkpoint da plataforma			
+         player.x = checks[2].x
+         player.y = checks[2].y-10
+         //botar o chapéu nele
+         hatFollow = true
+      }
+		
+		//fazer o slime pular
+		function slimeJump(){
+			slime.setVelocityY(-200);
+		}
+		
+		function slime2Stop(){
+			if (slime2.velocityX > 60 ||slime2.velocityX < -60 )
+			slime2.setVelocityX(0)
+		}
+		
+		jumpSide = true
+		
+		function slimeJump2(){
+			
+			if(jumpSide == true) {
+				slime2.setVelocityY(-200)
+				slime2.setVelocityX(-80)
+				jumpSide = false
+				
+			} else {
+				
+				if(jumpSide == false) {
+					slime2.setVelocityY(-200)
+					slime2.setVelocityX(80)
+					
+					jumpSide=true
+				}
+			}
+		}
+		
+		//fazer o fogo pular
+		function fireJump(){
+			//número aleatório pra altura do pulo
+			a = Math.floor((Math.random() * 100) + 150);
+			fire.setVelocityY(-a);
+		}
+		
+		//timer do pulo do slime
+		var slimeTimer = this.time.addEvent({
+			delay: 2500,                
+			callback: slimeJump,
+			loop: true
+		});
+		
+		var slime2Timer = this.time.addEvent({
+			delay: 1050,                
+			callback: slimeJump2,
+			loop: true
+		});
+		
+		
+		//timer do fogo	
+		var fireTimer = this.time.addEvent({
+			delay: 1500,                
+			callback: fireJump,
+			loop: true
+		});
+		
+		//animacao do player
+		this.anims.create({
+			key: 'left',
+			frames: this.anims.generateFrameNumbers('dude', {
+				start: 0,
+				end: 3
+			}),
+			frameRate: 10,
+			repeat: -1
+		});
+	
+		this.anims.create({
+			key: 'turn',
+			frames: [{
+				key: 'dude',
+				frame: 4
+			}],
+			frameRate: 20
+		});
+
+		this.anims.create({
+			key: 'right',
+			frames: this.anims.generateFrameNumbers('dude', {
+				start: 5,
+				end: 8
+			}),
+			frameRate: 10,
+			repeat: -1
+		});
+		
+		//criar camera 
+		var camera = this.cameras.main;
+		//conter a câmera no limite do mundo
+		camera.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+
+		//cam follow
+		camera.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+		camera.startFollow(player, true, 1, 1, 0, 30)
+
+		//zoom
+		camera.zoomTo(
+			2, //distancia   
+			1 // duracao
+		);
+		
+		
+	   //morte
+		function morte(player) {
+			somMorte.play()
+			player.setTint(0xff0000);
+			hat.setTint(0xff0000);
+			this.scene.restart();
+		}
+		
+		//matar slime
+		function slimekill(hat, slime) {
+			slime.setTint(0xff0000);
+			slime.destroy();
+			somMorteSlime.play();
+		}
+		
+		function slimekill2(hat, slime2) {
+			slime2.setTint(0xff0000);
+			slime2.destroy();
+			somMorteSlime.play();
+		}
+		
+		helpText = 0
+		//pegar checkpoint
+		function check(player, checkpoint) {
+         
+			if (checkpoint.numero == 1 && helpText == 0) {
+				helpText = this.add.text(244, 600, 'pegar chapéu -> V', {
+					fontSize: '11px',
+					fill: '#FFFFFF'
+				});
+				
+				helpText2 = this.add.text(210, 625, 'jogar ou soltar chapéu -> C', {
+					fontSize: '11px',
+					fill: '#FFFFFF'
+				});
+				
+				tuto = this.add.sprite(2000, 700, 'tutorial')
+				tuto.setAlpha(0.2)
+				tuto.setScale(0.5)
+				this.children.bringToTop(player)
+				this.children.bringToTop(hat)
+			}
+			//debug:
+			//console.log(CHECKPOINT)
+			//console.log(checkpoint.numero)
+         
+			if(CHECKPOINT < checkpoint.numero) {
+				
+            CHECKPOINT = checkpoint.numero;
+				
+				checkText = this.add.text(checkpoint.x-50, checkpoint.y-20, 'checkpoint ativo', {
+					fontSize: '10px',
+					fill: '#FFF'
+				});
+				
+				
+					
+			}
+		}
+		
+		distanciaPegar = 35
+		ativaFim = 0
+		yChapeu = 12
+		function fim() {
+			
+			if(ativaFim == 0) {
+				//musicaFundo.stop()
+				hatFollow = false
+				
+				hat.setScale(5)
+				distanciaPegar = 350
+				ativaFim = 1
+				yChapeu=42
+				this.children.bringToTop(hat)
+				somVitoria.play()
+				textoFinal = this.add.text(1900, 64, 'FIM DO JOGO', {
+					fontSize: '30px',
+					fill: '#FFFFFF'
+				});
+				textoFinal2 = this.add.text(1950, 90, 'Obrigado por jogar!', {
+					fontSize: '15px',
+					fill: '#FFFFFF'
+				});
+				
+			}
+		}
+			
+		//testes de sobreposição entre player, lava e espinhos
+		this.physics.add.overlap(player, lava, morte, null, this);
+		this.physics.add.overlap(player, spike, morte, null, this);
+		this.physics.add.overlap(player, spike2, morte, null, this);
+		this.physics.add.overlap(player, slime, morte, null, this);	
+		this.physics.add.overlap(player, slime2, morte, null, this);	
+		this.physics.add.overlap(player, fire, morte, null, this);	
+		this.physics.add.overlap(hat, slime, slimekill, null, this);
+		this.physics.add.overlap(hat, slime2, slimekill2, null, this);	
+		this.physics.add.overlap(player, checkpoints, check, null, this);
+		this.physics.add.overlap(hat, varfinal, fim, null, this);	
+		
+		
+		//adição de teclas do teclado
+		keyC = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C);
+		keyV = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.V);
+		keyR = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
+		
+		
+		
+		
+		
+				
+		
+		
+	}
+
+	function update(time, delta) {
+		//adição das setas do teclado
+		cursors = this.input.keyboard.createCursorKeys();
+				
+		//movimento e animação: lados e parado
+		
+		
+		
+		if (cursors.left.isDown) {
+			player.setVelocityX(-160);
+			player.anims.play('left', true);
+		} else if (cursors.right.isDown) {
+			player.setVelocityX(160);
+			player.anims.play('right', true);
+		} else {
+			player.setVelocityX(0);
+			player.anims.play('turn');
+		}
+		
+		//pulo
+		if (cursors.up.isDown && (player.body.blocked.down || player.body.touching.down)) {
+			player.setVelocityY(-212);
+			somPulo.play()
+		}		
+		
+		
+		
+		//mudança de gravidade do chapéu de acordo com estar na cabeça ou não
+		if (!hatFollow) {
+			hat.body.setGravityY(300)
+		} else {
+			hat.body.setGravityY(0)
+		}
+			
+		//atirar ou soltar chapéu
+		if (keyC.isDown && hatFollow == true) {
+			hatFollow = false
+			
+			if (cursors.right.isDown) {
+				hat.setVelocityX(200)
+				hat.setVelocityY(-50)
+			}
+			
+			if (cursors.left.isDown) {
+				hat.setVelocityX(-200)
+				hat.setVelocityY(-50)
+			}			
+		}
+		
+		//pegar chapéu
+		if (keyV.isDown && hatFollow == false && hat.body.blocked.down) {
+			var distX = Math.abs(player.x - hat.x);
+			var distY = Math.abs(player.y - hat.y);
+			if (distX < distanciaPegar && distY < distanciaPegar) {
+				hatFollow = true;
+			}
+		}
+		
+		//restart
+		if (keyR.isDown) {
+			this.scene.restart();
+		}
+        
+        //parar chapéu no chão
+        if (hat.body.blocked.down) {
+			hat.setVelocityX(0)
+			hat.setVelocityY(0)       
+		}
+		
+		varfinal.x = slimeGigante.x
+		varfinal.y = slimeGigante.y+50
+		
+		//manter o chapéu na cabeça do player
+		if (hatFollow == true) {
+			hat.x = player.x-1
+			hat.y = player.y-yChapeu
+		}
+		
+	}
+	
+    </script>
+</body>
+</html>
+
